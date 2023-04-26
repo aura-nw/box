@@ -1,12 +1,10 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-};
+use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
-use crate::msg::{Cw721HookMsg, Cw721ReceiveMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use crate::msg::{Cw721ReceiveMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use crate::state::{AllowedContracts, Config, ALLOWED_CONTRACTS, CONFIG, WHITELIST};
 
 // version info for migration info
@@ -72,17 +70,12 @@ pub fn receive_cw721(
     info: MessageInfo,
     cw721_msg: Cw721ReceiveMsg,
 ) -> Result<Response, ContractError> {
-    match from_binary(&cw721_msg.msg) {
-        Ok(Cw721HookMsg::Burn {
-            contract_address,
-            token_id: _,
-        }) => {
+    match cw721_msg {
+        Cw721ReceiveMsg {
+            sender, token_id, ..
+        } => {
             // convert contract address to canonical address
-            let contract_address = deps.api.addr_validate(&contract_address)?;
-            // if the sender is not the nft contract address, return error
-            if contract_address != info.sender {
-                return Err(ContractError::Unauthorized {});
-            }
+            let contract_address = info.sender;
 
             // if the contract address is not in the allowed list, return error
             let allowed_contracts = ALLOWED_CONTRACTS.load(deps.storage)?;
@@ -94,12 +87,12 @@ pub fn receive_cw721(
             }
 
             let whitelist_key = (
-                deps.api.addr_validate(&cw721_msg.sender).unwrap(),
+                deps.api.addr_validate(&sender).unwrap(),
                 contract_address.clone(),
             );
 
-            // increase the balance of the voucher for the cw721_msg.sender
-            // if the cw721_msg.sender is not in the whitelist, add it to the whitelist
+            // increase the balance of the voucher for the sender
+            // if sender is not in the whitelist, add it to the whitelist
             if WHITELIST
                 .may_load(deps.storage, whitelist_key.clone())?
                 .is_none()
@@ -113,12 +106,11 @@ pub fn receive_cw721(
 
             Ok(Response::new().add_attributes([
                 ("action", "receive_cw721"),
-                ("sender", cw721_msg.sender.as_ref()),
+                ("sender", sender.as_ref()),
                 ("contract_address", contract_address.as_ref()),
-                ("token_id", cw721_msg.token_id.as_ref()),
+                ("token_id", token_id.as_ref()),
             ]))
         }
-        Err(err) => Err(ContractError::Std(err)),
     }
 }
 
