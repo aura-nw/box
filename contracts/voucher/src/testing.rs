@@ -351,11 +351,7 @@ pub mod env {
         let execute_msg = cw721_base::msg::ExecuteMsg::<Empty, Empty>::SendNft {
             contract: voucher_contract_addr.to_string(),
             token_id: "1".to_string(),
-            msg: to_binary(&crate::msg::Cw721HookMsg::Burn {
-                contract_address: Addr::unchecked(nft_fake_contract_addr).to_string(),
-                token_id: "1".to_string(),
-            })
-            .unwrap(),
+            msg: to_binary(&Empty {}).unwrap(),
         };
 
         // execute contract
@@ -386,11 +382,7 @@ pub mod env {
         let execute_msg = cw721_base::msg::ExecuteMsg::<Empty, Empty>::SendNft {
             contract: voucher_contract_addr.to_string(),
             token_id: "1".to_string(),
-            msg: to_binary(&crate::msg::Cw721HookMsg::Burn {
-                contract_address: Addr::unchecked(nft_contract_addr).to_string(),
-                token_id: "1".to_string(),
-            })
-            .unwrap(),
+            msg: to_binary(&Empty {}).unwrap(),
         };
 
         // execute contract
