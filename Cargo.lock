@@ -327,6 +327,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cw2981-royalties"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6e38f030b0a524331108180418ab1c81b83a8e55efa9498ed8525e22dd66a77"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cw2 1.0.1",
+ "cw721 0.17.0",
+ "cw721-base 0.17.0",
+ "schemars",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "cw721"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -912,7 +928,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "voucher"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -921,6 +937,7 @@ dependencies = [
  "cw-storage-plus 1.0.1",
  "cw-utils 1.0.1",
  "cw2 1.0.1",
+ "cw2981-royalties",
  "cw721 0.17.0",
  "cw721-base 0.17.0",
  "schemars",

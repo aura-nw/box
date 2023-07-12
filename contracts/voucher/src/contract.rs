@@ -1,11 +1,17 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{
+    from_binary, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, QueryRequest, Response,
+    StdResult, WasmQuery,
+};
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
-use crate::msg::{Cw721ReceiveMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
-use crate::state::{AllowedContracts, Config, ALLOWED_CONTRACTS, CONFIG, WHITELIST};
+use crate::msg::{Cw721HookMsg, Cw721ReceiveMsg, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
+use crate::state::{AllowedTokens, Config, TokenInfo, Trait, ALLOWED_TOKENS, CONFIG, WHITELIST};
+
+use cw2981_royalties::Metadata;
+use cw721::Cw721QueryMsg;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:voucher";
@@ -28,10 +34,8 @@ pub fn instantiate(
     CONFIG.save(deps.storage, &config)?;
 
     // init allowed contract address list
-    let allowed_contracts = AllowedContracts {
-        contract_address: vec![],
-    };
-    ALLOWED_CONTRACTS.save(deps.storage, &allowed_contracts)?;
+    let allowed_tokens = AllowedTokens { tokens: vec![] };
+    ALLOWED_TOKENS.save(deps.storage, &allowed_tokens)?;
 
     Ok(
         Response::new()
@@ -56,9 +60,28 @@ pub fn execute(
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
+    let api = deps.api;
     match msg {
-        ExecuteMsg::AllowToken { contract_address } => {
-            allow_token(deps, env, info, contract_address)
+        ExecuteMsg::AllowToken {
+            contract_address,
+            token_type,
+        } => {
+            let token_type = match token_type {
+                Some(token_type) => token_type,
+                None => Trait {
+                    trait_type: "any".to_string(),
+                    value: "any".to_string(),
+                },
+            };
+            allow_token(
+                deps,
+                env,
+                info,
+                TokenInfo {
+                    contract_address: api.addr_validate(&contract_address)?,
+                    token_type,
+                },
+            )
         }
         ExecuteMsg::ReceiveNft(msg) => receive_cw721(deps, env, info, msg),
     }
@@ -70,29 +93,40 @@ pub fn receive_cw721(
     info: MessageInfo,
     cw721_msg: Cw721ReceiveMsg,
 ) -> Result<Response, ContractError> {
-    match cw721_msg {
-        Cw721ReceiveMsg {
-            sender, token_id, ..
-        } => {
+    match from_binary(&cw721_msg.msg) {
+        Ok(Cw721HookMsg::Burn {
+            contract_address,
+            token_id,
+            token_type,
+        }) => {
             // convert contract address to canonical address
             let contract_address = info.sender;
 
-            // if the contract address is not in the allowed list, return error
-            let allowed_contracts = ALLOWED_CONTRACTS.load(deps.storage)?;
-            if !allowed_contracts
-                .contract_address
-                .contains(&contract_address)
-            {
+            let token_type = match token_type {
+                Some(token_type) => token_type,
+                None => Trait {
+                    trait_type: "any".to_string(),
+                    value: "any".to_string(),
+                },
+            };
+
+            if !valid_trait(
+                deps.as_ref(),
+                TokenInfo {
+                    contract_address: contract_address.clone(),
+                    token_type: token_type.clone(),
+                },
+                token_id.clone(),
+            )? {
                 return Err(ContractError::NotAllowed {});
             }
 
             let whitelist_key = (
                 deps.api.addr_validate(&sender).unwrap(),
                 contract_address.clone(),
+                format!("{}{}", token_type.trait_type, token_type.value),
             );
 
-            // increase the balance of the voucher for the sender
-            // if sender is not in the whitelist, add it to the whitelist
             if WHITELIST
                 .may_load(deps.storage, whitelist_key.clone())?
                 .is_none()
@@ -104,13 +138,16 @@ pub fn receive_cw721(
                 WHITELIST.save(deps.storage, whitelist_key, &balance)?;
             }
 
-            Ok(Response::new().add_attributes([
-                ("action", "receive_cw721"),
-                ("sender", sender.as_ref()),
-                ("contract_address", contract_address.as_ref()),
-                ("token_id", token_id.as_ref()),
-            ]))
+            return Ok(Response::new().add_attributes([
+                ("action", "burn"),
+                ("sender", cw721_msg.sender.as_str()),
+                ("contract_address", contract_address.as_str()),
+                ("token_id", token_id.as_str()),
+                ("trait_type", token_type.trait_type.as_str()),
+                ("trait_value", token_type.value.as_str()),
+            ]));
         }
+        Err(_) => Err(ContractError::NotAllowed {}),
     }
 }
 
@@ -118,7 +155,7 @@ pub fn allow_token(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    contract_address: String,
+    token_info: TokenInfo,
 ) -> Result<Response, ContractError> {
     // if the sender is not admin, return error
     let config = CONFIG.load(deps.storage)?;
@@ -126,31 +163,68 @@ pub fn allow_token(
         return Err(ContractError::Unauthorized {});
     }
 
-    // convert contract address to canonical address
-    let contract_address = deps.api.addr_validate(&contract_address)?;
-
     // load allowed contract address list
-    let allowed_contracts = ALLOWED_CONTRACTS.load(deps.storage)?;
+    let allowed_tokens = ALLOWED_TOKENS.load(deps.storage)?;
 
     // if the contract address is already in the list, return error
-    if allowed_contracts
-        .contract_address
-        .contains(&contract_address)
-    {
+    if allowed_tokens.tokens.contains(&token_info) {
         return Err(ContractError::AlreadyAllowed {});
     }
 
-    // add the contract address to the list
-    let mut allowed_contracts = allowed_contracts;
-    allowed_contracts
-        .contract_address
-        .push(contract_address.clone());
-    ALLOWED_CONTRACTS.save(deps.storage, &allowed_contracts)?;
+    // add the token info to the list
+    let mut allowed_tokens = allowed_tokens;
+    allowed_tokens.tokens.push(token_info.clone());
+    ALLOWED_TOKENS.save(deps.storage, &allowed_tokens)?;
 
     Ok(Response::new().add_attributes([
         ("action", "allow_token"),
-        ("contract_address", contract_address.as_ref()),
+        ("contract_address", token_info.contract_address.as_ref()),
+        ("trait_type", &token_info.token_type.trait_type.to_string()),
+        ("trait_value", &token_info.token_type.value.to_string()),
     ]))
+}
+
+pub fn valid_trait(
+    deps: Deps,
+    token_info: TokenInfo,
+    token_id: String,
+) -> Result<bool, ContractError> {
+    let allowed_tokens = ALLOWED_TOKENS.load(deps.storage)?;
+    // if the token is not in the allowed list, return error
+    if !allowed_tokens.tokens.contains(&token_info) {
+        return Ok(false);
+    }
+
+    if token_info.token_type.trait_type == "any" && token_info.token_type.value == "any" {
+        Ok(true)
+    } else {
+        // check the type of the nft
+        let nft_info_msg = Cw721QueryMsg::NftInfo { token_id };
+        let nft_info_response: StdResult<cw721::NftInfoResponse<Metadata>> =
+            deps.querier.query(&QueryRequest::Wasm(WasmQuery::Smart {
+                contract_addr: token_info.contract_address.to_string(),
+                msg: to_binary(&nft_info_msg)?,
+            }));
+
+        match nft_info_response {
+            Ok(nft_info) => {
+                if let Some(attributes) = nft_info.extension.attributes {
+                    // foreach attribute, check if it is the same as the token type
+                    for attribute in attributes {
+                        if attribute.trait_type == token_info.token_type.trait_type
+                            && attribute.value == token_info.token_type.value
+                        {
+                            return Ok(true);
+                        }
+                    }
+                    Ok(false)
+                } else {
+                    Ok(false)
+                }
+            }
+            Err(_) => Ok(false),
+        }
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -160,7 +234,14 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::RemainingVouchers {
             owner,
             contract_address,
-        } => to_binary(&query_remaining_vouchers(deps, owner, contract_address)?),
+            token_type,
+        } => to_binary(&query_remaining_vouchers(
+            deps,
+            owner,
+            contract_address,
+            token_type,
+        )?),
+        QueryMsg::AllowedTokens {} => to_binary(&query_allowed_tokens(deps)?),
     }
 }
 
@@ -173,14 +254,25 @@ pub fn query_remaining_vouchers(
     deps: Deps,
     owner: String,
     contract_address: String,
+    token_type: Option<Trait>,
 ) -> StdResult<u64> {
     // convert owner and contract address to canonical address
     let owner = deps.api.addr_validate(&owner)?;
     let contract_address = deps.api.addr_validate(&contract_address)?;
 
+    let token_type = match token_type {
+        Some(token_type) => token_type,
+        None => Trait {
+            trait_type: "any".to_string(),
+            value: "any".to_string(),
+        },
+    };
     // load whitelist
-    let whitelist_key = (owner, contract_address);
-
+    let whitelist_key = (
+        owner,
+        contract_address,
+        format!("{}{}", token_type.trait_type, token_type.value),
+    );
     // if the owner is not in the whitelist, return 0
     if WHITELIST
         .may_load(deps.storage, whitelist_key.clone())?
@@ -193,4 +285,9 @@ pub fn query_remaining_vouchers(
 
         Ok(balance)
     }
+}
+
+pub fn query_allowed_tokens(deps: Deps) -> StdResult<AllowedTokens> {
+    let allowed_tokens = ALLOWED_TOKENS.load(deps.storage)?;
+    Ok(allowed_tokens)
 }

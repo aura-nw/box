@@ -219,6 +219,7 @@ pub mod env {
         // create execute message for contract
         let execute_msg = crate::msg::ExecuteMsg::AllowToken {
             contract_address: nft_contract_addr.to_string(),
+            token_type: None,
         };
 
         // execute contract
@@ -298,6 +299,7 @@ pub mod env {
         // create execute message for contract
         let execute_msg = crate::msg::ExecuteMsg::AllowToken {
             contract_address: nft_contract_addr.to_string(),
+            token_type: None,
         };
 
         // execute contract
@@ -325,6 +327,7 @@ pub mod env {
         // create execute message for contract
         let execute_msg = crate::msg::ExecuteMsg::AllowToken {
             contract_address: nft_contract_addr.to_string(),
+            token_type: None,
         };
 
         // execute contract
@@ -351,7 +354,12 @@ pub mod env {
         let execute_msg = cw721_base::msg::ExecuteMsg::<Empty, Empty>::SendNft {
             contract: voucher_contract_addr.to_string(),
             token_id: "1".to_string(),
-            msg: to_binary(&Empty {}).unwrap(),
+            msg: to_binary(&crate::msg::Cw721HookMsg::Burn {
+                contract_address: Addr::unchecked(nft_fake_contract_addr).to_string(),
+                token_id: "1".to_string(),
+                token_type: None,
+            })
+            .unwrap(),
         };
 
         // execute contract
@@ -382,52 +390,10 @@ pub mod env {
         let execute_msg = cw721_base::msg::ExecuteMsg::<Empty, Empty>::SendNft {
             contract: voucher_contract_addr.to_string(),
             token_id: "1".to_string(),
-            msg: to_binary(&Empty {}).unwrap(),
-        };
-
-        // execute contract
-        let response = app.execute_contract(
-            Addr::unchecked(USER_1.to_string()),
-            Addr::unchecked(nft_contract_addr.clone()),
-            &execute_msg,
-            &[],
-        );
-
-        assert!(response.is_ok());
-
-        // query RemainingVouchers of USER_1 in voucher contract
-        let query_msg = crate::msg::QueryMsg::RemainingVouchers {
-            owner: USER_1.to_string(),
-            contract_address: nft_contract_addr.to_string(),
-        };
-
-        let response: u64 = app
-            .wrap()
-            .query_wasm_smart(voucher_contract_addr.to_string(), &query_msg)
-            .unwrap();
-
-        assert_eq!(response, 1);
-
-        // query RemainingVouchers of ADMIN in voucher contract
-        let query_msg = crate::msg::QueryMsg::RemainingVouchers {
-            owner: ADMIN.to_string(),
-            contract_address: nft_contract_addr.to_string(),
-        };
-
-        let response: u64 = app
-            .wrap()
-            .query_wasm_smart(voucher_contract_addr.to_string(), &query_msg)
-            .unwrap();
-
-        assert_eq!(response, 0);
-
-        // create execute message for contract
-        let execute_msg = cw721_base::msg::ExecuteMsg::<Empty, Empty>::SendNft {
-            contract: voucher_contract_addr.to_string(),
-            token_id: "2".to_string(),
             msg: to_binary(&crate::msg::Cw721HookMsg::Burn {
                 contract_address: Addr::unchecked(nft_contract_addr).to_string(),
-                token_id: "2".to_string(),
+                token_id: "1".to_string(),
+                token_type: None,
             })
             .unwrap(),
         };
@@ -446,6 +412,57 @@ pub mod env {
         let query_msg = crate::msg::QueryMsg::RemainingVouchers {
             owner: USER_1.to_string(),
             contract_address: nft_contract_addr.to_string(),
+            token_type: None,
+        };
+
+        let response: u64 = app
+            .wrap()
+            .query_wasm_smart(voucher_contract_addr.to_string(), &query_msg)
+            .unwrap();
+
+        assert_eq!(response, 1);
+
+        // query RemainingVouchers of ADMIN in voucher contract
+        let query_msg = crate::msg::QueryMsg::RemainingVouchers {
+            owner: ADMIN.to_string(),
+            contract_address: nft_contract_addr.to_string(),
+            token_type: None,
+        };
+
+        let response: u64 = app
+            .wrap()
+            .query_wasm_smart(voucher_contract_addr.to_string(), &query_msg)
+            .unwrap();
+
+        assert_eq!(response, 0);
+
+        // create execute message for contract
+        let execute_msg = cw721_base::msg::ExecuteMsg::<Empty, Empty>::SendNft {
+            contract: voucher_contract_addr.to_string(),
+            token_id: "2".to_string(),
+            msg: to_binary(&crate::msg::Cw721HookMsg::Burn {
+                contract_address: Addr::unchecked(nft_contract_addr).to_string(),
+                token_id: "2".to_string(),
+                token_type: None,
+            })
+            .unwrap(),
+        };
+
+        // execute contract
+        let response = app.execute_contract(
+            Addr::unchecked(USER_1.to_string()),
+            Addr::unchecked(nft_contract_addr.clone()),
+            &execute_msg,
+            &[],
+        );
+
+        assert!(response.is_ok());
+
+        // query RemainingVouchers of USER_1 in voucher contract
+        let query_msg = crate::msg::QueryMsg::RemainingVouchers {
+            owner: USER_1.to_string(),
+            contract_address: nft_contract_addr.to_string(),
+            token_type: None,
         };
 
         let response: u64 = app
