@@ -100,7 +100,12 @@ pub fn receive_cw721(
             token_type,
         }) => {
             // convert contract address to canonical address
-            let contract_address = info.sender;
+            let contract_address = deps.api.addr_validate(&contract_address)?;
+
+            // the infor.sender and contract address must be the same
+            if contract_address != info.sender {
+                return Err(ContractError::Unauthorized {});
+            }
 
             let token_type = match token_type {
                 Some(token_type) => token_type,
@@ -122,7 +127,7 @@ pub fn receive_cw721(
             }
 
             let whitelist_key = (
-                deps.api.addr_validate(&sender).unwrap(),
+                deps.api.addr_validate(&cw721_msg.sender).unwrap(),
                 contract_address.clone(),
                 format!("{}{}", token_type.trait_type, token_type.value),
             );
