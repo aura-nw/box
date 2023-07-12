@@ -34,6 +34,7 @@ cosmwasm-storage  = { workspace = true }
 schemars          = { workspace = true }
 serde             = { workspace = true }
 thiserror         = { workspace = true }
+cw2981-royalties  = { workspace = true }
 
 [dev-dependencies]
 cw-multi-test     = { workspace = true }

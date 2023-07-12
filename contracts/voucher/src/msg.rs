@@ -1,7 +1,7 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Binary;
 
-use crate::state::Config;
+use crate::state::{AllowedTokens, Config, Trait};
 
 /// Message type for `instantiate` entry_point
 #[cw_serde]
@@ -10,7 +10,10 @@ pub struct InstantiateMsg {}
 /// Message type for `execute` entry_point
 #[cw_serde]
 pub enum ExecuteMsg {
-    AllowToken { contract_address: String },
+    AllowToken {
+        contract_address: String,
+        token_type: Option<Trait>,
+    },
     ReceiveNft(Cw721ReceiveMsg),
 }
 
@@ -28,7 +31,10 @@ pub enum QueryMsg {
     RemainingVouchers {
         owner: String,
         contract_address: String,
+        token_type: Option<Trait>,
     },
+    #[returns(AllowedTokens)]
+    AllowedTokens {},
 }
 
 #[cw_serde]
@@ -43,6 +49,7 @@ pub enum Cw721HookMsg {
     Burn {
         contract_address: String,
         token_id: String,
+        token_type: Option<Trait>,
     },
 }
 

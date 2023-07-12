@@ -8,14 +8,27 @@ pub struct Config {
 }
 
 #[cw_serde]
-pub struct AllowedContracts {
-    pub contract_address: Vec<Addr>,
+pub struct Trait {
+    pub trait_type: String,
+    pub value: String,
+}
+
+#[cw_serde]
+pub struct TokenInfo {
+    pub contract_address: Addr,
+    pub token_type: Trait,
+}
+
+// admin must specify the token including contract_address and type of nft
+#[cw_serde]
+pub struct AllowedTokens {
+    pub tokens: Vec<TokenInfo>,
 }
 
 pub const CONFIG: Item<Config> = Item::new("config");
-pub const ALLOWED_CONTRACTS: Item<AllowedContracts> = Item::new("allowed_contracts");
+pub const ALLOWED_TOKENS: Item<AllowedTokens> = Item::new("allowed_tokens");
 
 // This map will store the amount of voucher tokens that user can take
 // Each time user burn a voucher token, the amount will be decreased by 1
-// Mapping: (user_address, nft_contract_address) => amount
-pub const WHITELIST: Map<(Addr, Addr), u64> = Map::new("whitelist");
+// Mapping: (user_address, contract_info) => amount
+pub const WHITELIST: Map<(Addr, Addr, String), u64> = Map::new("whitelist");
